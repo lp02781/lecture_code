@@ -1,0 +1,294 @@
+import tkinter as tk
+import time
+import numpy as np
+import random
+from PIL import ImageTk, Image
+from grid_world import GridWorld
+
+PhotoImage = ImageTk.PhotoImage
+UNIT = 100 
+HEIGHT = 10  
+WIDTH = 10  
+POSSIBLE_ACTIONS = [0, 1, 2, 3, 4, 5, 6, 7]
+
+class Env:
+    def __init__(self):
+        self.width = WIDTH  
+        self.height = HEIGHT  
+        self.reward = [[0] * WIDTH for _ in range(HEIGHT)]
+        self.possible_actions = POSSIBLE_ACTIONS
+        self.all_state = []
+
+        for x in range(WIDTH):
+            for y in range(HEIGHT):
+                state = [x, y]
+                self.all_state.append(state)
+
+    def get_reward(self, state, action):
+        next_state = self.state_after_action(state, action)
+        return self.reward[next_state[0]][next_state[1]]
+
+    def state_after_action(self, state, action_index):
+        action = ACTIONS[action_index]
+        return self.check_boundary([state[0] + action[0], state[1] + action[1]])
+
+    @staticmethod
+    def check_boundary(state):
+        state[0] = (0 if state[0] < 0 else WIDTH - 1
+        if state[0] > WIDTH - 1 else state[0])
+        state[1] = (0 if state[1] < 0 else HEIGHT - 1
+        if state[1] > HEIGHT - 1 else state[1])
+        return state
+
+    def get_transition_prob(self, state, action):
+        return self.transition_probability
+
+    def get_all_states(self):
+        return self.all_state
+
+class GraphicDisplay(tk.Tk):
+    def __init__(self, value):
+        super(GraphicDisplay, self).__init__()
+        self.title('grid world')
+        self.geometry('{0}x{1}'.format(HEIGHT * UNIT, HEIGHT * UNIT + 50))
+        self.texts = []
+        self.arrows = []
+        self.env = Env()
+        self.value = value
+        self.iteration_count = 0
+        self.improvement_count = 0
+        self.is_moving = 0
+        self.action_state = np.zeros([10,10])
+        (self.up, self.down, self.left,
+         self.right, self.left_up, self.right_up, self.right_down, self.left_down), self.shapes = self.load_images()
+        self.canvas = self._build_canvas()
+        self.print_box_number()
+        self.print_optimal_policy()
+        self.move_by_policy()
+
+    def get_action(self, x, y):
+        action = self.action_state[x,y]
+        return action
+
+    def move_by_policy(self):
+        x, y = self.find_rectangle()
+        while [x, y] != [6,6]:
+            action = self.get_action(x, y)
+            self.after(100, self.rectangle_move(action))
+            x, y = self.find_rectangle()
+    
+    def rectangle_move(self, action):
+        base_action = np.array([0, 0])
+        location = self.find_rectangle()
+        self.render()
+        if action == 1 and location[0] > 0:  # up
+            base_action[1] -= UNIT
+        elif action == 3 and location[0] < HEIGHT - 1:  # down
+            base_action[1] += UNIT
+        elif action == 0 and location[1] > 0:  # left
+            base_action[0] -= UNIT
+        elif action == 2 and location[1] < WIDTH - 1:  # right
+            base_action[0] += UNIT
+
+        elif action == 4 and location[0] > 0 and location[1] > 0:  #left-up
+            base_action[1] -= UNIT
+            base_action[0] -= UNIT
+        elif action == 5 and location[1] < WIDTH - 1 and location[0] > 0:  #right-up 
+            base_action[0] += UNIT
+            base_action[1] -= UNIT
+        elif action == 6 and location[1] < WIDTH - 1 and location[0] < HEIGHT - 1:  #right-down 
+            base_action[0] += UNIT
+            base_action[1] += UNIT
+        elif action == 7 and location[1] > 0 and location[0] < HEIGHT - 1:  #left-down
+            base_action[0] -= UNIT
+            base_action[1] += UNIT
+
+        self.canvas.move(self.rectangle, base_action[0],
+                         base_action[1])  # move agent
+
+    def find_rectangle(self):
+        temp = self.canvas.coords(self.rectangle)
+        x = (temp[0] / 100) - 0.5
+        y = (temp[1] / 100) - 0.5
+        return int(y), int(x)
+
+    def check_boundary(self, cell):
+        status = True
+        if cell[0] < 0 \
+            or cell[0] > 10 -1 \
+            or cell[1] < 0  \
+            or cell[1] > 10 -1 :
+          status = False
+        return status
+    
+    def print_optimal_policy(self):
+        for i in self.arrows:
+            self.canvas.delete(i)
+        for state in self.env.get_all_states():
+            i = state[0]
+            j = state[1]
+            
+            cell = (i,j-1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 0
+
+            cell = (i-1,j-1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 4
+
+            cell = (i-1,j)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 1
+
+            cell = (i-1,j+1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 5
+
+            cell = (i,j+1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 2
+            
+            cell = (i+1,j+1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 6
+            
+            cell = (i+1,j)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 3
+
+            cell = (i+1,j-1)
+            if self.check_boundary(cell):
+                if (self.value[cell]  < self.value[i,j]):
+                    action = 7
+            
+            self.action_state[i,j] = action
+            self.draw_from_values(state, action)
+
+    def draw_from_values(self, state, action):
+        i = state[0]
+        j = state[1]
+        self.draw_one_arrow(i, j, action)
+
+    def draw_one_arrow(self, col, row, action):
+        if col == 6 and row == 6:
+            return
+        if action == 1: #up
+            origin_x, origin_y = 50 + (UNIT * row), 10 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.up))
+        elif action == 3: #down 
+            origin_x, origin_y = 50 + (UNIT * row), 90 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.down))
+        elif action == 2: #right 
+            origin_x, origin_y = 90 + (UNIT * row), 50 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.right))
+        elif action == 0: #left 
+            origin_x, origin_y = 10 + (UNIT * row), 50 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.left))
+        
+        if action == 4: #left-up
+            origin_x, origin_y = 10 + (UNIT * row), 10 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.left_up))                                            
+        elif action == 5: #right-up 
+            origin_x, origin_y = 90 + (UNIT * row), 10 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.right_up))
+        elif action == 6: #right-down 
+            origin_x, origin_y = 90 + (UNIT * row), 90 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.right_down))
+        elif action == 7: #left-down 
+            origin_x, origin_y = 10 + (UNIT * row), 90 + (UNIT * col)
+            self.arrows.append(self.canvas.create_image(origin_x, origin_y,
+                                                        image=self.left_down))
+
+    def print_box_number(self):
+        haha = 0
+        for i in range(WIDTH):
+            for j in range(HEIGHT):
+                haha = self.value[i,j]
+                self.text_box(i, j, haha)                                                  
+
+    def text_box(self, row, col, contents, font='Helvetica', size=10,
+                   style='normal', anchor="nw"):
+        origin_x, origin_y = 50, 40
+        x, y = origin_y + (UNIT * col), origin_x + (UNIT * row)
+        font = (font, str(size), style)
+        text = self.canvas.create_text(x, y, fill="black", text=contents,
+                                       font=font, anchor=anchor)
+        return self.texts.append(text)
+
+    def _build_canvas(self):
+        canvas = tk.Canvas(self, bg='white',
+                           height=HEIGHT * UNIT,
+                           width=WIDTH * UNIT)
+
+        for col in range(0, WIDTH * UNIT, UNIT): 
+            x0, y0, x1, y1 = col, 0, col, HEIGHT * UNIT
+            canvas.create_line(x0, y0, x1, y1)
+        for row in range(0, HEIGHT * UNIT, UNIT):  
+            x0, y0, x1, y1 = 0, row, HEIGHT * UNIT, row
+            canvas.create_line(x0, y0, x1, y1)
+
+        self.rectangle = canvas.create_image(50, 950, image=self.shapes[0])
+        
+        canvas.create_image(650, 650, image=self.shapes[2])
+        canvas.create_image(250, 350, image=self.shapes[1])
+        canvas.create_image(250, 450, image=self.shapes[1])
+        canvas.create_image(250, 550, image=self.shapes[1])
+        canvas.create_image(250, 650, image=self.shapes[1])
+        canvas.create_image(350, 850, image=self.shapes[1])
+        canvas.create_image(350, 950, image=self.shapes[1])
+        canvas.create_image(550, 450, image=self.shapes[1])
+        canvas.create_image(550, 550, image=self.shapes[1])
+        canvas.create_image(550, 650, image=self.shapes[1])
+        canvas.create_image(550, 750, image=self.shapes[1])
+        canvas.create_image(550, 850, image=self.shapes[1])
+        canvas.create_image(550, 950, image=self.shapes[1])
+        canvas.create_image(650, 450, image=self.shapes[1])
+        canvas.create_image(750, 450, image=self.shapes[1])
+        canvas.pack()
+
+        return canvas
+    
+    def text_reward(self, row, col, contents, font='Helvetica', size=10,
+                    style='normal', anchor="nw"):
+        origin_x, origin_y = 30, 25
+        x, y = origin_y + (UNIT * col), origin_x + (UNIT * row)
+        font = (font, str(size), style)
+        text = self.canvas.create_text(x, y, fill="black", text=contents,
+                                       font=font, anchor=anchor)
+        return self.texts.append(text)
+
+    def load_images(self):
+        PhotoImage = ImageTk.PhotoImage
+        up = PhotoImage(Image.open("img/up.png").resize((13, 13)))
+        right = PhotoImage(Image.open("img/right.png").resize((13, 13)))
+        left = PhotoImage(Image.open("img/left.png").resize((13, 13)))
+        down = PhotoImage(Image.open("img/down.png").resize((13, 13)))
+        left_up = PhotoImage(Image.open("img/left_up.png").resize((13, 13)))
+        right_up = PhotoImage(Image.open("img/right_up.png").resize((13, 13)))
+        right_down = PhotoImage(Image.open("img/right_down.png").resize((13, 13)))
+        left_down = PhotoImage(Image.open("img/left_down.png").resize((13, 13)))
+        rectangle = PhotoImage(
+            Image.open("img/rectangle.png").resize((65, 65)))
+        triangle = PhotoImage(
+            Image.open("img/triangle.png").resize((65, 65)))
+        circle = PhotoImage(Image.open("img/circle.png").resize((65, 65)))
+        return (up, down, left, right, left_up, right_up, right_down, left_down), (rectangle, triangle, circle)
+
+    def render(self):
+        time.sleep(0.1)
+        self.canvas.tag_raise(self.rectangle)
+        self.update()
