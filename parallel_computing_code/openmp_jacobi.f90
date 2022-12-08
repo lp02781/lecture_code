@@ -91,7 +91,7 @@ PROGRAM openmp_jacobi
 		!$omp end parallel do
 		if(mod(iter,10)==0) then
 			error_sum = 0
-			!$omp PARALLEL do private(u0,j1,j2)
+			!$omp PARALLEL do private(u0,j1,j2) reduction(+:emax)
 			do i = 1,n
 				j1=ia(i)
 				j2=ia(i+1)-1
@@ -112,4 +112,5 @@ PROGRAM openmp_jacobi
 	call system_clock(i,j,k)
 	time_end=real(i,kind=8)/real(j,kind=8)
 	time_cpu=time_end-time_begin
+	print*, time_cpu
 end
