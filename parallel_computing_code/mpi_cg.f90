@@ -1,4 +1,4 @@
-PROGRAM csr_mpi
+PROGRAM mpi_cg
 	include 'mpif.h'
 
 	integer myrank, size_Of_Cluster, ierror, tag, maxit
@@ -23,6 +23,10 @@ PROGRAM csr_mpi
 	
 	m_dum = n/p
 	m = m_dum
+	
+	if (myrank.lt.1) then
+		m = m + 1
+	end if
 	
 	nnz = m*3
 	nintf = nnz
@@ -74,6 +78,7 @@ PROGRAM csr_mpi
 			do i =1,m
 				t(i) = u(i)
 			end do
+			go to 10
 		end if	
 		ia(m+1) = cnt
 		cnt = cnt -1
@@ -119,14 +124,16 @@ PROGRAM csr_mpi
 		ia(m+1) = cnt
 		niut = 2
 	end if
+	10 continue
 	
 	!print *, myrank, 'haha', ja
-	allocate(si(0:(niut+1)), ri(niut+1)) 
-	allocate(sintf(si(niut+1)-1), rintf(neq-nintf), iut(niut))
-	allocate(arhsu(neq), solu(neq))
+	allocate(si(0:(niut+1)), ri(0:(niut+1))) 
+	allocate(sintf(0:(si(niut+1)-1)), rintf(0:(neq-nintf)), iut(0:niut))
+	!allocate(arhsu(0:neq), solu(0:neq))
 	
-	print *, maxit
-	call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,arhsu,solu)
+	print *, myrank, 'haha', b
+	call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,b,u)
+	!call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,arhsu,solu)
 	
 END
 
@@ -146,7 +153,7 @@ END
       integer Allocatestatus,iter
       integer alstatus,status(MPI_STATUS_SIZE),tag,ierr
 
-      real v1u(neq),solu(neq)
+      real v1u(neq),solu(0:neq)
 
       real bknum,bkden,akden,bk,ak,ddot,ro,ro0,bknum1,akden1
       real eps,err0,err1,dnrm2,err,dtinv,x0,x1,xcoor,tmp,r1,ro1
@@ -160,6 +167,7 @@ END
       real au(maxmt1),arhsu(neq)
 
       n=neq
+      nnod = neq
 
       Allocate(r(n),z(n),p0(n),stat=Allocatestatus)
       if(AllocateStatus/=0) stop "**Not enough memory "
@@ -180,13 +188,26 @@ END
         svar(i)=solu(sintf(i))
       enddo
       tag=1
-      do i=1,niut
-        call MPI_ISEND(svar(si(i)),si(i+1)-si(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i),ierr)
-        call MPI_IRECV(rvar(ri(i)),ri(i+1)-ri(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i+niut),ierr)
-      enddo
-      do i=1,niut
-        call MPI_WAIT(request(i+niut),status,ierr)
-      enddo
+      
+      call mpi_barrier(mpi_comm_world,ierr)
+	  if(myrank.eq.0 .and. p.gt.1) then
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+	  else if(myrank.eq.p-1 .and. p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(2),ierr)
+      else if(p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(3),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(4),ierr)
+	  end if
+      if(p.gt.1) then
+		do i=1,niut
+			call MPI_WAIT(request(i+niut),status,ierr)
+		enddo
+	  endif
+	  call mpi_barrier(mpi_comm_world,ierr)
 
       do i=1,n-nintf
         solu(rintf(i))=rvar(i)
@@ -201,7 +222,7 @@ END
       do i=1,nintf
        z(i)=r(i)/au(ju(i))
       enddo
-
+		
       err0 = 0.d0
       do i=1,nintf
         err0=err0+r(i)*r(i)
@@ -239,13 +260,27 @@ END
 	enddo
 
         tag=1
-	do i=1,niut
-	  call MPI_ISEND(svar(si(i)),si(i+1)-si(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i),ierr)
-      call MPI_IRECV(rvar(ri(i)),ri(i+1)-ri(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i+niut),ierr)
-        enddo
-	do i=1,niut
-	  call MPI_WAIT(request(i+niut),status,ierr)
-	enddo
+	  
+	  call mpi_barrier(mpi_comm_world,ierr)
+	  if(myrank.eq.0 .and. p.gt.1) then
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+	  else if(myrank.eq.p-1 .and. p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(2),ierr)
+      else if(p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(3),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(4),ierr)
+	  end if
+      if(p.gt.1) then
+		do i=1,niut
+			call MPI_WAIT(request(i+niut),status,ierr)
+		enddo
+	  endif
+	  call mpi_barrier(mpi_comm_world,ierr)
+	  
 	do i=1,ri(niut+1)-1
 	  p0(rintf(i))=rvar(i)
 	enddo
@@ -267,7 +302,15 @@ END
         do i=1,nintf
          z(i)=r(i)/au(ju(i))
         enddo
-
+		
+		!error=0 
+		!error0=0
+		!do i, n
+			!error0=t0(i)-t(i)
+			!error=error+error0*error0
+		!end do
+		!error = sqrt(error)
+	  
         err=0.d0
         do i=1,nintf
           err=err+r(i)*r(i)
@@ -277,9 +320,41 @@ END
 !---------------------------------------------------------
        if (abs(err).gt.1.d20) then
           if (myrank.eq.0) then
+!			 fname = 'T'
+!			 fp1 = char(nnode/100000+48)
+!			 fp2 = char(mod(nnode,100000)/10000+48)
+!			 fp3 = char(mod(nnode,10000)/1000+48)
+!			 fp4 = char(mod(nnode,1000)/100+48)
+!			 fp5 = char(mod(nnode,100)/10+48)
+!			 fp6 = char(mod(nnode,10)/48)
+!             Ext = .dat
+!             fout = fname//fp1//fp2//fp3//fp4//fp5//fp6//Ext
+!             open(15,file=fout, status='unknown')
+!             write(15,*)'varibles="x","Temperature"'
+!             do i=1,m
+!				t(i) = u(i)
+!			 end do
+!			 tag = 1
+!			 do ip=2,p
+!				do i=1,m
+!					call MPI_RECV(u0(i),1,MPI_DOUBLE_PRECISION,ip-1,tag,MPI_COMM_WORLD,status,ierr)
+!					j=(ip-1)*m+i
+!					t(j)=u0(i)
+!				end do
+!			 end do
+!			 do i =1,nnode
+!				write(15,*) coord(:,i),t(i)
+!			 end do
+!			 close(15)
+!		 else 
+!			tag = 1
+!			do i = 1,m
+!				call MPI_SEND(u(i),1,MPI_DOUBLE_PRECISION,0,tag,MPI_COMM_WORLD,ierr)
+!			end do 
+             
              write(*,*) 'blow-up in the solver, res=',err
-          endif  
-          stop
+         endif  
+         stop
        endif
        if(myrank.eq.0)write(*,*)'Iter=',iter,'Residual=',err/err0
        if ( err/err0.le.1.d-6 .and. iter.ge.10 ) go to 502
@@ -294,13 +369,25 @@ END
         svar(i)=solu(sintf(i))
       enddo
       tag=1
-      do i=1,niut
-        call MPI_ISEND(svar(si(i)),si(i+1)-si(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i),ierr)
-        call MPI_IRECV(rvar(ri(i)),ri(i+1)-ri(i), MPI_DOUBLE_PRECISION,iut(i)-1,tag, MPI_COMM_WORLD,request(i+niut),ierr)
-      enddo
-      do i=1,niut
-        call MPI_WAIT(request(i+niut),status,ierr)
-      enddo
+      call mpi_barrier(mpi_comm_world,ierr)
+	  if(myrank.eq.0 .and. p.gt.1) then
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+	  else if(myrank.eq.p-1 .and. p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(2),ierr)
+      else if(p.gt.1) then
+			call MPI_ISEND(solu(1),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(1),ierr)
+			call MPI_ISEND(solu(intf),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(2),ierr)
+			call MPI_IRECV(solu(0),1,MPI_DOUBLE_PRECISION,myrank-1,tag,MPI_COMM_WORLD,request(3),ierr)
+			call MPI_IRECV(solu(intf+1),1,MPI_DOUBLE_PRECISION,myrank+1,tag,MPI_COMM_WORLD,request(4),ierr)
+	  end if
+      if(p.gt.1) then
+		do i=1,niut
+			call MPI_WAIT(request(i+niut),status,ierr)
+		enddo
+	  endif
+	  call mpi_barrier(mpi_comm_world,ierr)
       do i=1,n-nintf
         solu(rintf(i))=rvar(i)
       enddo

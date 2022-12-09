@@ -114,13 +114,5 @@ PROGRAM csr_mpi
 		ia(m+1) = cnt
 		iut = 2
 	end if
-	!print *, myrank, 'haha', ja
-	
-	
-	
-	
-	
-	
-	
-	
+	print *, myrank, 'haha', ja
 END
