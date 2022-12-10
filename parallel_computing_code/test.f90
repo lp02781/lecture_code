@@ -57,7 +57,7 @@ PROGRAM mpi_cg
 		t(i) = 0
 	enddo
 	
-	do i=1, m+1
+	do i=1, n+1
 		ia(i) = 0
 	enddo
 	
