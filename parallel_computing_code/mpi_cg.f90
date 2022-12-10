@@ -3,7 +3,7 @@ PROGRAM mpi_cg
 
 	integer myrank, size_Of_Cluster, ierror, tag, maxit
 	integer p, n, cnt, nnz, m, nintf, neq, niut, maxmt1
-	real n_dum, h, s, rhs, m_dum
+	real n_dum, h, s, rhs, m_dum, power
 	integer, dimension(:), allocatable :: ia,ja,ju,si,ri,sintf,rintf,iut
 	real, dimension(:), allocatable :: u,b,r,t,au,arhsu,solu
 	
@@ -15,6 +15,7 @@ PROGRAM mpi_cg
 	!print *, 'Hello World from process: ', p, 'of ', size_Of_Cluster
 	p = 3
 	n = 9
+	power = 2
 	
 	!nnz = (n-2)*3+3
 	
@@ -24,19 +25,15 @@ PROGRAM mpi_cg
 	m_dum = n/p
 	m = m_dum
 	
-	if (myrank.lt.1) then
-		m = m + 1
-	end if
+	!if (myrank.lt.1) then
+	!	m = m + 1
+	!end if
 	
 	nnz = m*3
-	nintf = nnz
 		
 	h = 1/n_dum
 	s = 7
-	rhs = -s*h*h
-	
-	maxit = 1000000
-	maxmt1 = nnz
+	rhs = -s*h**power
 		
 	allocate(au(1:nnz), ia(1:n+1), ja(1:nnz), ju(1:n)) 
 	allocate(b(1:n),u(1:n),r(1:n),t(1:n)) 
@@ -126,13 +123,17 @@ PROGRAM mpi_cg
 	end if
 	10 continue
 	
-	!print *, myrank, 'haha', ja
+	nintf = nnz
+	maxit = 1000000
+	maxmt1 = nnz
+	
+	print *, myrank, 'haha', au
 	allocate(si(0:(niut+1)), ri(0:(niut+1))) 
 	allocate(sintf(0:(si(niut+1)-1)), rintf(0:(neq-nintf)), iut(0:niut))
 	!allocate(arhsu(0:neq), solu(0:neq))
 	
-	print *, myrank, 'haha', b
-	call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,b,u)
+	!print *, myrank, 'haha', b
+	!call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,b,u)
 	!call cg(maxit,nintf,neq,niut,maxmt1,myrank,ia,ja,ju, si,ri,sintf,rintf,iut,au,arhsu,solu)
 	
 END

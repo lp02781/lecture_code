@@ -2,18 +2,20 @@ PROGRAM openmp_jacobi
 	use omp_lib
 
 	integer n, cnt, nnz, maxit
-	real n_dum, h, s, rhs
+	real n_dum, h, s, rhs, power
 	DOUBLE PRECISION error_sum, error_initial, error_rate, error_th	
 	integer, dimension(:), allocatable :: au,ia,ja,ju
 	real*8, dimension(:), allocatable :: u,b,r 
-			
-	n = 800
+
+	n = 8000
+	power = 1.5
+	
 	nnz = (n-2)*3+3
 	
 	n_dum = n
 	h = 1/n_dum
 	s = 7
-	rhs = -s*h*h
+	rhs = -s*h**power
 	
 	error_th = 0.0001
 	
@@ -57,6 +59,7 @@ PROGRAM openmp_jacobi
 	ju(n) = cnt
 	ia(n+1) = cnt+1
 	
+	call system_clock(i,j,k)
 	time_begin = real(i,kind=8)/real(j,kind=8)
 	
 	!$omp PARALLEL do private(u0,j1,j2)
@@ -89,7 +92,7 @@ PROGRAM openmp_jacobi
 			u(i)=r(i)/au(ji)
 		end do
 		!$omp end parallel do
-		if(mod(iter,10)==0) then
+		if(mod(iter,10000)==0) then
 			error_sum = 0
 			!$omp PARALLEL do private(u0,j1,j2) reduction(+:emax)
 			do i = 1,n
@@ -107,10 +110,10 @@ PROGRAM openmp_jacobi
 			error_rate = error_sum/error_initial
 			if(error_rate.LT.error_th) exit
 		end if
-		if(mod(iter,10000)==0) print*, iter, error_sum, error_initial, error_rate, error_th
 	end do
 	call system_clock(i,j,k)
 	time_end=real(i,kind=8)/real(j,kind=8)
 	time_cpu=time_end-time_begin
+	print*, iter, error_sum, error_initial, error_rate, error_th
 	print*, time_cpu
 end
